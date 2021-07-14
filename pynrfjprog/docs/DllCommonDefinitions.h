@@ -39,6 +39,7 @@
 #ifndef DLL_COMMON_DEFINITIONS_H
 #define DLL_COMMON_DEFINITIONS_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #if defined(__cplusplus)
@@ -53,12 +54,17 @@ extern "C" {
 #define JLINKARM_SWD_DEFAULT_SPEED_KHZ (2000UL)
 #define JLINKARM_SWD_MAX_SPEED_KHZ (50000UL)
 
+#define NRFJPROG_LOG_STRING_LENGTH (512)
 #define NRFJPROG_STRING_LENGTH (256)
 #define NRFJPROG_MAX_PATH (260) /* Paths are assumed to not exceed 260 characters. */
 #define NRFJPROG_COM_PER_JLINK (10)
+#define NRFJPROG_INVALID_ADDRESS (0xFFFFFFFFUL)
+#define NRFJPROG_INVALID_RESET_PIN (0xFFFFFFFFUL)
 
 /* Deprecated Macro. Use result of NRFJPROG_read_ram_sections_count() function instead. */
 #define MAX_RAM_BLOCKS (16)
+
+typedef void * nrfjprog_inst_t;
 
 typedef struct
 {
@@ -202,6 +208,7 @@ typedef enum
     NRF5340_xxAA_ENGD = 0x05340003,
     NRF5340_xxAA_FUTURE = 0x053400FF,
 
+
     /* NRF9160 versions. */
     NRF9160_xxAA_REV1   = 0x09160000,
     NRF9160_xxAA_REV2   = 0x09160001,
@@ -233,12 +240,12 @@ typedef enum
     NRF5340 = 0x05340000,
 
     NRF9160 = 0x09160000,
+
 } device_name_t;
 
 /* Identified device memory of nRF devices. */
 typedef enum
 {
-
     UNKNOWN_MEM = 0,
     AA          = 1,
     AB          = 2,
@@ -262,13 +269,56 @@ typedef enum
 
 //****************
 
+typedef enum
+{
+    MEM_TYPE_CODE     = 0,
+    MEM_TYPE_DATA_RAM = 1,
+    MEM_TYPE_CODE_RAM = 2,
+    MEM_TYPE_FICR     = 3,
+    MEM_TYPE_UICR     = 4,
+    MEM_TYPE_XIP      = 5,
+} memory_type_t;
+
+/* Bitmasks for memory access permissions */
+typedef enum
+{
+    MEM_ACCESS_EXECUTE = 1, /* CPU can execute code from memory */
+    MEM_ACCESS_WRITE   = 2, /* Note that some memories must be erased before writing. */
+    MEM_ACCESS_READ    = 4,
+    MEM_ACCESS_ERASE   = 8, /* Memories such as FLASH must be erased through the memory controller (NVMC), while RAM can
+                               usually be cleared/erased just by writing to it. */
+    MEM_ACCESS_SECURE = 16, /* The security attribute of the memory. If the bit is set the memory is "secure". Only used
+                               for devices that implements ARM Trustzone. */
+} memory_access_t;
+
+#define MEMORY_DESCRIPTION_LABEL_MAX_STR_LEN 32
+typedef struct
+{
+    uint32_t start;
+    uint32_t size;
+    uint32_t num_pages;
+    memory_type_t type;
+    memory_access_t access_flags; /* The types of accesses allowed to the memory. See enum 'memory_access_t' */
+    bool is_runtime_configurable; /* If true, the start address and size can change during device operation. */
+    uint32_t _id;                 /* ID of the memory. This field is used internally. */
+    char label[MEMORY_DESCRIPTION_LABEL_MAX_STR_LEN + 1]; /* Name (c-string) */
+    uint32_t _reserved[8];                                /* Reserved for future use */
+} memory_description_t;
+
+/* Some device memories has varying page sizes (typically RAM) */
+typedef struct
+{
+    uint32_t size;
+    uint32_t num_repeats;
+} page_repetitions_t;
+
 /* Identified types of nRF devices */
 typedef enum
 {
-    NRF51_FAMILY   = 0,
-    NRF52_FAMILY   = 1,
-    NRF53_FAMILY   = 53,
-    NRF91_FAMILY   = 91,
+    NRF51_FAMILY = 0,
+    NRF52_FAMILY = 1,
+    NRF53_FAMILY = 53,
+    NRF91_FAMILY = 91,
     UNKNOWN_FAMILY = 99
 } device_family_t;
 
@@ -393,6 +443,7 @@ typedef enum
     INVALID_DEVICE_FOR_OPERATION = -4,
     WRONG_FAMILY_FOR_DEVICE      = -5,
     UNKNOWN_DEVICE               = -6,
+    INVALID_SESSION              = -7,
 
     /* Connection issues. */
     EMULATOR_NOT_CONNECTED = -10,
@@ -417,6 +468,7 @@ typedef enum
     JLINKARM_DLL_ERROR               = -102,
     JLINKARM_DLL_TOO_OLD             = -103,
     JLINKARM_DLL_READ_ERROR          = -104,
+    JLINKARM_DLL_TIME_OUT_ERROR      = -105,
 
     /* UART DFU errors */
     SERIAL_PORT_NOT_FOUND        = -110,
@@ -430,11 +482,18 @@ typedef enum
     NRFJPROG_SUB_DLL_NOT_FOUND                = -150,
     NRFJPROG_SUB_DLL_COULD_NOT_BE_OPENED      = -151,
     NRFJPROG_SUB_DLL_COULD_NOT_LOAD_FUNCTIONS = -152,
+    NRFJPROG_HOST_EXE_NOT_FOUND               = -153,
 
     /* High Level DLL */
-    VERIFY_ERROR          = -160,
-    RAM_IS_OFF_ERROR      = -161,
-    FILE_OPERATION_FAILED = -162,
+    VERIFY_ERROR     = -160,
+    RAM_IS_OFF_ERROR = -161,
+
+    /* File errors */
+    FILE_OPERATION_FAILED     = -162,
+    FILE_PARSING_ERROR        = -170,
+    FILE_UNKNOWN_FORMAT_ERROR = -171,
+    FILE_INVALID_ERROR        = -172,
+    UNKNOWN_MEMORY_ERROR      = -173,
 
     /* DFU errors */
     TIME_OUT  = -220,
@@ -450,16 +509,49 @@ typedef enum
 
 typedef enum
 {
-    critical = 50,
-    error    = 40,
-    warning  = 30,
-    info     = 20,
-    debug    = 10,
+    critical = 60,
+    error    = 50,
+    warning  = 40,
+    info     = 30,
+    debug    = 20,
+    trace    = 10,
     none     = 0,
 } nrfjprogdll_log_level;
 
+typedef enum
+{
+    ERASE_NONE                 = 0, /* Do nothing. */
+    ERASE_ALL                  = 1, /* Erase whole chip. */
+    ERASE_PAGES                = 2, /* Erase specified sectors, excluding UICR. */
+    ERASE_PAGES_INCLUDING_UICR = 3  /* Erase specified sectors, with UICR support. */
+} erase_action_t;
+
+typedef enum
+{
+    VERIFY_NONE = 0, /* Do nothing. */
+    VERIFY_READ = 1, /* Verify by reading back contents. */
+    VERIFY_HASH = 2, /* Verify by hashing contents, faster than VERIFY_READ. */
+} verify_action_t;
+
+typedef struct
+{
+    bool readram;
+    bool readcode;
+    bool readuicr;
+    bool readficr;
+    bool readqspi;
+    /* Workaround for issue https://bugs.python.org/issue22273 in ctypes, force by-value struct argument into stack.*/
+    bool reserved[3];
+} read_options_t;
+
 /* Expected log function prototype for logging operations. */
 typedef void msg_callback(const char * msg_str);
+/* Expected log function prototype for contextualized logging operations. */
+/* Log function prototypes for logging and progress reporting operations. */
+typedef void msg_callback_ex(const char * logger,
+                             nrfjprogdll_log_level level,
+                             const char * msg_str,
+                             nrfjprog_inst_t instance);
 
 
 #if defined(__cplusplus)

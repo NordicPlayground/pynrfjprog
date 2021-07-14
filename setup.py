@@ -1,15 +1,5 @@
 from setuptools import setup, find_packages
-import sys
-
 import pynrfjprog
-
-py2 = sys.version_info[0] == 2
-py3 = sys.version_info[0] == 3
-
-if py2:
-    requirements = ['enum34', 'future', 'pathlib']
-elif py3:
-    requirements = ['future']
 
 setup(
 
@@ -26,6 +16,8 @@ setup(
 
     license=open('LICENSE.txt').read(),
 
+    python_requires='>=3.5',
+
     classifiers=[
 
         'Development Status :: 5 - Production/Stable',
@@ -40,22 +32,21 @@ setup(
         'Topic :: Software Development :: Debuggers',
         'Topic :: Software Development :: Embedded Systems',
 
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8'
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9'
     ],
 
     keywords='nrfjprog pynrfjprog highlevelpynrfjprog',
 
-    install_requires=requirements,
+    install_requires=['future'],
 
     packages=find_packages(),
     package_data={
-        'pynrfjprog.lib_x86': ['*.dll', '*.so*', '*.dylib*'],
-        'pynrfjprog.lib_x64': ['*.dll', '*.so*', '*.dylib*'],
-        'pynrfjprog.docs': ['*.h', 'nrfjprog_release_notes.txt'],
+        'pynrfjprog.lib_x86': ['*.dll', '*.so*', '*.dylib*', 'jlinkarm_nrf_worker*'],
+        'pynrfjprog.lib_x64': ['*.dll', '*.so*', '*.dylib*', 'jlinkarm_nrf_worker*'],
+        'pynrfjprog.docs': ['*.h', 'nrfjprog_release_notes*.txt'],
         'pynrfjprog.examples': ['*.hex']
     }
 )
